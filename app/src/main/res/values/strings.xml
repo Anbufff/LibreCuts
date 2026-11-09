@@ -170,6 +170,7 @@
     <string name="str_encoder_hardware_desc">Fastest export performance using device GPU</string>
     <string name="str_encoder_software_desc">Maximum compatibility export using CPU</string>
     <string name="str_draw">Draw</string>
+    <string name="str_cric">CRIC</string>
     <string name="str_handwriting">Handwriting</string>
     <string name="str_brush_size">Brush Size</string>
     <string name="str_clear">Clear</string>

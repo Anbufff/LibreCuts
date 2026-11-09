@@ -600,6 +600,7 @@ class VideoEditingActivity : AppCompatActivity() {
         setupExoPlayer()
         setupCustomSeeker()
         setupHandwritingControls()
+        setupCricControls()
         observeViewModelState()
 
         // Play/Pause button logic
@@ -1979,7 +1980,7 @@ class VideoEditingActivity : AppCompatActivity() {
 
     private fun setActiveToolButton(activeId: Int) {
         if (isShowingPreview) dismissPreview()
-        val toolIds = listOf(R.id.btnText, R.id.btnMediaOverlay, R.id.btnDraw, R.id.btnAudio, R.id.btnCrop, R.id.btnSubtitles, R.id.btnVoiceOver, R.id.btnCanvasBackground)
+        val toolIds = listOf(R.id.btnText, R.id.btnMediaOverlay, R.id.btnDraw, R.id.btnCric, R.id.btnAudio, R.id.btnCrop, R.id.btnSubtitles, R.id.btnVoiceOver, R.id.btnCanvasBackground)
         for (id in toolIds) {
             val btn = findViewById<ImageButton>(id) ?: continue
             btn.setBackgroundResource(if (id == activeId) R.drawable.tool_button_active else R.drawable.tool_button_inactive)
@@ -2535,6 +2536,61 @@ class VideoEditingActivity : AppCompatActivity() {
         editingControlsWrapper.visibility = View.VISIBLE
         setActiveToolButton(-1)
     }
+
+    // ---- Cricket Score Card (Step 1) -------------------------------------------------
+    private val cricScoreLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        setActiveToolButton(-1)
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uriStr = result.data?.getStringExtra(CricketScoreCardActivity.RESULT_URI) ?: return@registerForActivityResult
+        val cardAspect = result.data?.getFloatExtra(CricketScoreCardActivity.RESULT_ASPECT, 4f) ?: 4f
+        addCricketScoreCardOverlay(Uri.parse(uriStr), cardAspect)
+    }
+
+    private fun setupCricControls() {
+        findViewById<ImageButton>(R.id.btnCric)?.setBounceClickListener {
+            setActiveToolButton(R.id.btnCric)
+            val options = arrayOf("Score Card (Batting)", "Bowl Card (Bowling)")
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Cricket Score Card")
+                .setItems(options) { _, which ->
+                    val type = if (which == 0) CricketScoreCardActivity.TYPE_BAT else CricketScoreCardActivity.TYPE_BOWL
+                    cricScoreLauncher.launch(CricketScoreCardActivity.createIntent(this, type))
+                }
+                .setOnCancelListener { setActiveToolButton(-1) }
+                .show()
+        }
+    }
+
+    private fun addCricketScoreCardOverlay(imageUri: Uri, cardAspect: Float) {
+        val frameRatio = if (primaryVideoAspectRatio > 0f) primaryVideoAspectRatio else 16f / 9f
+        // Card takes 90% of the frame width; height follows the card's own aspect ratio.
+        var relW = 0.9f
+        var relH = relW * frameRatio / cardAspect
+        if (relH > 0.9f) {            // very tall crop: limit by height instead
+            relH = 0.9f
+            relW = relH * cardAspect / frameRatio
+        }
+        val startTimeMs = getGlobalPosition()
+        val sequenceDuration = getTotalSequenceDuration().coerceAtLeast(3000L)
+        val endTimeMs = (startTimeMs + 5000L).coerceAtMost(sequenceDuration)
+
+        val op = com.tharunbirla.librecuts.models.EditOperation.AddImageOverlay(
+            imageUri = imageUri,
+            relativeX = 0.5f,
+            relativeY = 0.8f,          // lower third, like a TV score bug
+            relativeWidth = relW,
+            relativeHeight = relH,
+            rotationAngle = 0f,
+            startTimeMs = startTimeMs,
+            endTimeMs = endTimeMs
+        )
+        viewModel.addOperation(op)
+        viewModel.project.value?.let { renderTracks(it) }
+        Toast.makeText(this, "Score card added to timeline", Toast.LENGTH_SHORT).show()
+    }
+    // ------------------------------------------------------------------------------------
 
     private var isHandwritingActive = false
 

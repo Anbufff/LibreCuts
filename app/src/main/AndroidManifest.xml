@@ -67,6 +67,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".CricketScoreCardActivity"
+            android:exported="false"
+            android:theme="@style/Editor" />
+
+        <activity
             android:name=".ProjectImportActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
