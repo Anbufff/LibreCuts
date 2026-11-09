@@ -1,0 +1,71 @@
+name: Apply Cric Patch and Build
+
+# Run manually: Actions tab -> "Apply Cric Patch and Build" -> Run workflow.
+# Applies the cric patch once, commits it, then builds the debug APK.
+# This version FAILS LOUDLY (red X) if the patch is missing or cannot be applied,
+# instead of silently building the original app.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Apply patch
+        run: |
+          set -e
+          ALREADY=app/src/main/java/com/tharunbirla/librecuts/CricketScoreCardActivity.kt
+          PATCH=$(ls *cric*.patch 2>/dev/null | head -1 || true)
+          echo "Patch file found: '${PATCH}'"
+          if [ -f "$ALREADY" ]; then
+            echo "Cricket code already in repo - building current code."
+          elif [ -z "$PATCH" ]; then
+            echo "::error::No cric patch file in repo root. Upload cric-step1.patch to the ROOT of the repo."
+            ls -la
+            exit 1
+          else
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            if git apply --check "$PATCH" 2>/dev/null; then
+              git apply "$PATCH"
+            elif git apply --ignore-whitespace --check "$PATCH" 2>/dev/null; then
+              git apply --ignore-whitespace "$PATCH"
+            else
+              echo "::error::Patch does not apply cleanly (your fork may be newer than the version the patch was made for)."
+              git apply --check "$PATCH" || true
+              exit 1
+            fi
+            git rm -q "$PATCH"
+            git add -A
+            git commit -m "Add Cricket Score Card (step 1)"
+            git push
+            echo "Patch applied and pushed."
+          fi
+
+      - name: Confirm CRIC button is in the code
+        run: |
+          grep -q "btnCric" app/src/main/res/layout/activity_video_editing.xml \
+            && echo "OK: btnCric present in layout" \
+            || { echo "::error::btnCric missing from layout"; exit 1; }
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - run: chmod +x gradlew
+      - name: Assemble debug
+        run: ./gradlew assembleDebug
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: librecuts-cric-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
