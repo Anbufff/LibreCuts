@@ -1,0 +1,47 @@
+name: Apply Cric Patch and Build
+
+# Run manually: Actions tab -> "Apply Cric Patch and Build" -> Run workflow.
+# It applies cric-step1.patch (from the repo root) once, commits the result,
+# then builds the debug APK and uploads it as an artifact.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Apply patch (only if still pending)
+        run: |
+          if [ -f cric-step1.patch ] && git apply --check cric-step1.patch 2>/dev/null; then
+            git apply cric-step1.patch
+            git rm -q cric-step1.patch
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add -A
+            git commit -m "Add Cricket Score Card (step 1)"
+            git push
+          else
+            echo "Patch already applied or not found - building current code."
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - run: chmod +x gradlew
+      - name: Assemble debug
+        run: ./gradlew assembleDebug
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: librecuts-cric-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
